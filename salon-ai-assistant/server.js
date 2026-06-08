@@ -1,13 +1,18 @@
 require("dotenv").config();
 
 const fs = require("fs");
+const http = require("http");
 const path = require("path");
 const express = require("express");
 const session = require("express-session");
+const { WebSocketServer } = require("ws");
 const { getAppointments, initDb } = require("./db");
-const { handleVoiceNext, handleVoiceStart } = require("./voice");
+const { handleIncomingCall } = require("./twilio");
+const { handleMediaStream } = require("./voice");
 
 const app = express();
+const server = http.createServer(app);
+const mediaStreamServer = new WebSocketServer({ noServer: true });
 const PORT = process.env.PORT || 3000;
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "salon123";
@@ -78,8 +83,26 @@ app.get("/appointments", requireLogin, async (req, res, next) => {
   }
 });
 
-app.post("/voice", handleVoiceStart);
-app.post("/voice/next", handleVoiceNext);
+app.get("/health", (req, res) => {
+  res.json({ ok: true });
+});
+
+app.post("/voice", handleIncomingCall);
+
+server.on("upgrade", (req, socket, head) => {
+  const { pathname } = new URL(req.url, `http://${req.headers.host}`);
+
+  if (pathname !== "/voice/stream") {
+    socket.destroy();
+    return;
+  }
+
+  mediaStreamServer.handleUpgrade(req, socket, head, (webSocket) => {
+    mediaStreamServer.emit("connection", webSocket, req);
+  });
+});
+
+mediaStreamServer.on("connection", handleMediaStream);
 
 app.use((req, res) => {
   res.status(404).send("Diese Seite wurde nicht gefunden.");
@@ -148,8 +171,10 @@ function escapeHtml(value) {
 
 initDb()
   .then(() => {
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`Salon KI-Assistent läuft auf http://localhost:${PORT}`);
+      console.log("Twilio Voice Webhook: POST /voice");
+      console.log("Twilio Media Stream WebSocket: /voice/stream");
     });
   })
   .catch((error) => {

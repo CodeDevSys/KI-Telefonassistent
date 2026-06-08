@@ -1,139 +1,250 @@
 # Salon AI Assistant
 
-## 1. Projektübersicht
+Echtes Telefon-MVP für einen KI-Telefonassistenten eines Friseursalons.
 
-Dieses Projekt ist ein kleines MVP für einen KI-Telefonassistenten für einen Friseursalon.
+Der Ablauf ist real:
 
-Ein Kunde ruft über Twilio Voice an. Der Assistent führt auf Deutsch durch die Terminvereinbarung, erkennt Dienstleistung und Terminwunsch mit OpenAI, prüft die Verfügbarkeit in SQLite und speichert den Termin nur, wenn der 30-Minuten-Slot frei ist.
+1. Kunde ruft eine Twilio-Telefonnummer an.
+2. Twilio ruft den lokalen Node.js Server über ngrok auf.
+3. `POST /voice` gibt TwiML mit `Connect Stream` zurück.
+4. Twilio öffnet einen WebSocket zu `/voice/stream`.
+5. OpenAI Realtime verarbeitet die Sprache live.
+6. Die KI nutzt echte Backend-Tools für Verfügbarkeit und Buchung.
+7. Termine werden in SQLite gespeichert.
+8. Die Friseurin sieht neue Termine im Admin-Dashboard.
 
-Die Friseurin kann sich über eine einfache Weboberfläche einloggen und alle Termine ansehen.
+Es gibt keinen Chat-Demo-Modus und keine Dummy-Daten.
 
-Unterstützte Dienstleistungen:
-
-- Haare schneiden
-- Haare färben
-- Styling
-
-Jede Dienstleistung dauert 30 Minuten.
-
-Öffnungszeiten:
-
-- Montag bis Freitag: 09:00 bis 18:00
-- Samstag: 09:00 bis 14:00
-- Sonntag: geschlossen
-
-## 2. Installation
+## 1. Installation
 
 ```bash
 npm install
 ```
 
-## 3. ENV konfigurieren
-
-Kopieren Sie die Beispieldatei:
+## 2. ENV konfigurieren
 
 ```bash
 cp .env.example .env
 ```
 
-Danach die Werte in `.env` setzen:
+`.env` ausfüllen:
 
 ```env
 PORT=3000
-OPENAI_API_KEY=
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_PHONE_NUMBER=
+PUBLIC_BASE_URL=https://IHRE-NGROK-DOMAIN.ngrok-free.app
+OPENAI_API_KEY=sk-...
+OPENAI_REALTIME_MODEL=gpt-4o-realtime-preview
+OPENAI_REALTIME_VOICE=alloy
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_PHONE_NUMBER=+1...
 ADMIN_USER=admin
 ADMIN_PASS=salon123
-SESSION_SECRET=supersecret
+SESSION_SECRET=bitte-aendern
 ```
 
-Hinweise:
+Wichtig:
 
-- `OPENAI_API_KEY` wird für flexibles Verstehen von Dienstleistung und Datum/Uhrzeit genutzt.
-- Ohne OpenAI-Key gibt es einfache Fallback-Erkennung für typische deutsche Eingaben.
-- `ADMIN_USER`, `ADMIN_PASS` und `SESSION_SECRET` sollten produktiv geändert werden.
+- `OPENAI_API_KEY` ist Pflicht für echte Live-Sprache.
+- `PUBLIC_BASE_URL` muss die öffentliche HTTPS-ngrok-URL sein.
+- Für Twilio Media Streams wird daraus automatisch `wss://.../voice/stream`.
 
-## 4. Server starten
+## 3. Server starten
 
 ```bash
 npm start
 ```
 
-Der Server läuft standardmäßig unter:
+Der Server läuft lokal unter:
 
 ```text
 http://localhost:3000
 ```
 
-Beim ersten Start wird automatisch eine SQLite-Datenbank `salon.sqlite` erstellt und die Tabelle `appointments` angelegt.
+Beim ersten Start wird automatisch `salon.sqlite` erstellt.
 
-## 5. Twilio konfigurieren
+## 4. ngrok installieren und starten
 
-In der Twilio Console:
+ngrok installieren:
 
-1. Eine Voice-fähige Telefonnummer öffnen.
-2. Unter Voice Webhook die URL setzen:
-
-```text
-https://IHRE-DOMAIN/voice
+```bash
+npm install -g ngrok
 ```
 
-3. Methode auf `POST` setzen.
-4. Für lokale Tests kann ein Tunnel wie ngrok genutzt werden:
+Oder von der offiziellen Seite installieren:
+
+```text
+https://ngrok.com/download
+```
+
+Tunnel starten:
 
 ```bash
 ngrok http 3000
 ```
 
-Dann die HTTPS-ngrok-URL bei Twilio eintragen:
+ngrok zeigt eine öffentliche HTTPS-URL, zum Beispiel:
 
 ```text
-https://...ngrok-free.app/voice
+https://abc123.ngrok-free.app
 ```
 
-Der weitere Gesprächsfluss läuft über:
+Diese URL in `.env` setzen:
+
+```env
+PUBLIC_BASE_URL=https://abc123.ngrok-free.app
+```
+
+Server danach neu starten.
+
+## 5. Twilio Trial Account einrichten
+
+1. Twilio Account erstellen:
 
 ```text
-POST /voice/next
+https://www.twilio.com/try-twilio
 ```
 
-## 6. Login-Daten
+2. Trial-Telefonnummer kaufen:
+   - Twilio Console öffnen.
+   - `Phone Numbers` auswählen.
+   - Eine Voice-fähige Nummer kaufen.
 
-Standardwerte:
+3. Verified Caller ID einrichten:
+   - Twilio Trial Accounts dürfen nur verifizierte Ziel-/Anrufernummern nutzen.
+   - In der Twilio Console `Verified Caller IDs` öffnen.
+   - Ihre eigene Handynummer verifizieren.
+   - Den Bestätigungscode eingeben.
+
+Hinweis:
+
+Mit einem Twilio Trial Account können Sie nur von beziehungsweise zu verifizierten Nummern testen. Für echte beliebige Kundenanrufe muss der Twilio Account upgegradet werden.
+
+## 6. Twilio Webhook konfigurieren
+
+In der Twilio Console die gekaufte Telefonnummer öffnen.
+
+Unter `Voice Configuration`:
+
+- `A call comes in`: `Webhook`
+- URL:
+
+```text
+https://abc123.ngrok-free.app/voice
+```
+
+- Methode: `HTTP POST`
+
+Speichern.
+
+Twilio öffnet anschließend bei jedem Anruf automatisch den Media Stream:
+
+```text
+wss://abc123.ngrok-free.app/voice/stream
+```
+
+## 7. Testanruf durchführen
+
+1. Server starten:
+
+```bash
+npm start
+```
+
+2. ngrok starten:
+
+```bash
+ngrok http 3000
+```
+
+3. `PUBLIC_BASE_URL` in `.env` auf die aktuelle ngrok-URL setzen.
+4. Server neu starten.
+5. Twilio Voice Webhook auf `https://IHRE-NGROK-URL/voice` setzen.
+6. Mit der verifizierten Telefonnummer die Twilio-Nummer anrufen.
+
+Der Assistent begrüßt den Kunden und führt die Terminbuchung per Sprache durch.
+
+## 8. Gesprächslogik
+
+Die KI spricht Deutsch und folgt diesem Ablauf:
+
+1. Begrüßung
+2. Dienstleistung erkennen:
+   - Haare schneiden
+   - Haare färben
+   - Styling
+3. Terminwunsch verstehen
+4. Verfügbarkeit live in SQLite prüfen
+5. Falls belegt oder geschlossen: drei freie Alternativen anbieten
+6. Name und Telefonnummer abfragen
+7. Termin in SQLite speichern
+8. Termin bestätigen
+
+Die KI darf Termine nicht frei erfinden. Sie muss diese Backend-Tools nutzen:
+
+- `checkAvailability(date, time)`
+- `getAvailableSlots(date, time)`
+- `createAppointment(name, phone, service, date, time)`
+
+## 9. Slot- und Öffnungszeiten
+
+- Alle Termine dauern 30 Minuten.
+- Montag bis Freitag: 09:00 bis 18:00
+- Samstag: 09:00 bis 14:00
+- Sonntag: geschlossen
+- Doppelbuchungen werden durch einen eindeutigen SQLite-Index verhindert.
+
+## 10. Admin Login
+
+Login:
+
+```text
+http://localhost:3000/login
+```
+
+Standarddaten:
 
 - Benutzername: `admin`
 - Passwort: `salon123`
 
-Die Werte sind über `.env` konfigurierbar:
+Konfigurierbar über:
 
 ```env
 ADMIN_USER=admin
 ADMIN_PASS=salon123
 ```
 
-Login:
-
-```text
-GET /login
-```
-
 Terminübersicht:
 
 ```text
-GET /appointments
+http://localhost:3000/appointments
 ```
 
-## 7. Projektstruktur
+Neue Termine aus echten Telefonanrufen werden direkt aus SQLite geladen.
+
+## 11. API und Routen
+
+```text
+GET  /login
+POST /login
+GET  /logout
+GET  /appointments
+POST /voice
+WS   /voice/stream
+GET  /health
+```
+
+## 12. Projektstruktur
 
 ```text
 salon-ai-assistant/
-  server.js
-  db.js
-  voice.js
-  .env.example
   package.json
+  server.js
+  voice.js
+  ai.js
+  twilio.js
+  db.js
+  .env.example
   README.md
   /views
     login.html
@@ -142,13 +253,11 @@ salon-ai-assistant/
     style.css
 ```
 
-## 8. Erweiterungsmöglichkeiten
+## 13. Erweiterungsmöglichkeiten
 
-- Kalenderansicht für Termine ergänzen.
-- Dienstleistungen mit unterschiedlichen Dauern speichern.
-- Kundendaten in einer separaten Tabelle verwalten.
-- SMS-Bestätigung über Twilio senden.
-- Terminabsagen und Umbuchungen unterstützen.
-- Bessere OpenAI-Prompts für komplexere Gesprächssituationen ergänzen.
-- Admin-Seite um Such- und Filterfunktionen erweitern.
-- Persistenten Session Store für produktiven Betrieb nutzen.
+- SMS-Bestätigung nach erfolgreicher Buchung.
+- Kalenderansicht im Admin-Dashboard.
+- Absagen und Umbuchungen per Sprache.
+- Unterschiedliche Dauer je Dienstleistung.
+- Persistenter Session Store für produktiven Betrieb.
+- Validierung von Twilio-Signaturen für öffentliche Deployments.

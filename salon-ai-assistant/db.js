@@ -68,7 +68,7 @@ async function getAppointments() {
   return all(`
     SELECT id, name, phone, service, appointment_date, appointment_time, created_at
     FROM appointments
-    ORDER BY appointment_date DESC, appointment_time DESC, created_at DESC
+    ORDER BY created_at DESC, id DESC
   `);
 }
 
@@ -85,10 +85,88 @@ async function isSlotAvailable(appointmentDate, appointmentTime) {
   return row.count === 0;
 }
 
-async function createAppointment({ name, phone, service, appointmentDate, appointmentTime }) {
-  if (!isWithinOpeningHours(appointmentDate, appointmentTime)) {
-    const error = new Error("Der gewünschte Termin liegt außerhalb der Öffnungszeiten.");
-    error.code = "INVALID_SLOT";
+async function checkAvailability(date, time) {
+  if (!isValidDateString(date)) {
+    return {
+      available: false,
+      reason: "INVALID_DATE",
+      message: "Das Datum ist ungültig. Bitte nutzen Sie das Format YYYY-MM-DD.",
+    };
+  }
+
+  if (!isValidSlotTime(time)) {
+    return {
+      available: false,
+      reason: "INVALID_TIME",
+      message: "Die Uhrzeit ist ungültig. Termine sind nur in 30-Minuten-Slots möglich.",
+    };
+  }
+
+  if (!isWithinOpeningHours(date, time)) {
+    return {
+      available: false,
+      reason: "CLOSED",
+      message: "Der gewünschte Termin liegt außerhalb der Öffnungszeiten.",
+    };
+  }
+
+  const available = await isSlotAvailable(date, time);
+  return {
+    available,
+    reason: available ? null : "SLOT_TAKEN",
+    message: available
+      ? "Dieser Termin ist verfügbar."
+      : "Der gewünschte Termin ist leider bereits vergeben.",
+  };
+}
+
+async function getAvailableSlots(date, time, minimumCount = 3) {
+  const startDate = isValidDateString(date) ? date : formatDate(new Date());
+  const startTime = isValidSlotTime(time) ? time : "09:00";
+  const slots = await findNextAvailableSlots(startDate, startTime, minimumCount);
+
+  return slots.map((slot) => {
+    const [slotDate, slotTime] = slot.split(" ");
+    return {
+      date: slotDate,
+      time: slotTime,
+      datetime: slot,
+    };
+  });
+}
+
+async function createAppointment(appointment) {
+  const normalized = normalizeAppointmentInput(appointment);
+  const missing = [];
+
+  if (!normalized.name) missing.push("name");
+  if (!normalized.phone) missing.push("phone");
+  if (!normalized.service) missing.push("service");
+  if (!normalized.appointmentDate) missing.push("date");
+  if (!normalized.appointmentTime) missing.push("time");
+
+  if (missing.length > 0) {
+    const error = new Error(`Fehlende Eingaben: ${missing.join(", ")}.`);
+    error.code = "MISSING_INPUT";
+    throw error;
+  }
+
+  if (!["Haare schneiden", "Haare färben", "Styling"].includes(normalized.service)) {
+    const error = new Error("Die Dienstleistung ist ungültig.");
+    error.code = "INVALID_SERVICE";
+    throw error;
+  }
+
+  if (!isValidPhone(normalized.phone)) {
+    const error = new Error("Die Telefonnummer ist ungültig.");
+    error.code = "INVALID_PHONE";
+    throw error;
+  }
+
+  const availability = await checkAvailability(normalized.appointmentDate, normalized.appointmentTime);
+  if (!availability.available) {
+    const error = new Error(availability.message);
+    error.code = availability.reason;
     throw error;
   }
 
@@ -99,7 +177,14 @@ async function createAppointment({ name, phone, service, appointmentDate, appoin
           (name, phone, service, appointment_date, appointment_time, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `,
-      [name, phone, service, appointmentDate, appointmentTime, new Date().toISOString()]
+      [
+        normalized.name,
+        normalized.phone,
+        normalized.service,
+        normalized.appointmentDate,
+        normalized.appointmentTime,
+        new Date().toISOString(),
+      ]
     );
 
     return result.id;
@@ -112,6 +197,49 @@ async function createAppointment({ name, phone, service, appointmentDate, appoin
 
     throw error;
   }
+}
+
+function normalizeAppointmentInput(appointment) {
+  const datetime = appointment.datetime || appointment.appointmentDateTime || "";
+  const [dateFromDatetime, timeFromDatetime] = String(datetime).trim().split(/[ T]/);
+
+  return {
+    name: String(appointment.name || "").trim().replace(/\s+/g, " "),
+    phone: normalizePhone(appointment.phone),
+    service: normalizeService(appointment.service),
+    appointmentDate: appointment.appointmentDate || appointment.date || dateFromDatetime || null,
+    appointmentTime: normalizeTime(appointment.appointmentTime || appointment.time || timeFromDatetime || ""),
+  };
+}
+
+function normalizeService(service) {
+  const value = String(service || "").trim();
+  const normalized = value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  if (normalized.includes("schneid")) {
+    return "Haare schneiden";
+  }
+
+  if (normalized.includes("farb") || normalized.includes("faerb")) {
+    return "Haare färben";
+  }
+
+  if (normalized.includes("styling")) {
+    return "Styling";
+  }
+
+  return value;
+}
+
+function normalizePhone(phone) {
+  return String(phone || "").trim().replace(/[^\d+]/g, "");
+}
+
+function isValidPhone(phone) {
+  return /^\+?\d{6,20}$/.test(String(phone || ""));
 }
 
 async function findNextAvailableSlots(startDate, startTime, minimumCount = 3) {
@@ -213,6 +341,15 @@ function isValidSlotTime(time) {
   return minutes >= 0 && minutes < 24 * 60 && (minutePart === 0 || minutePart === 30);
 }
 
+function normalizeTime(time) {
+  const match = String(time || "").trim().match(/^(\d{1,2}):(\d{1,2})$/);
+  if (!match) {
+    return null;
+  }
+
+  return `${String(Number(match[1])).padStart(2, "0")}:${String(Number(match[2])).padStart(2, "0")}`;
+}
+
 function parseDate(date) {
   const [year, month, day] = date.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day));
@@ -260,6 +397,8 @@ module.exports = {
   SLOT_MINUTES,
   initDb,
   getAppointments,
+  checkAvailability,
+  getAvailableSlots,
   isSlotAvailable,
   createAppointment,
   findNextAvailableSlots,
