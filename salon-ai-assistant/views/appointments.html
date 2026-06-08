@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Termine</title>
+    <link rel="stylesheet" href="/public/style.css" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div>
+        <h1>Terminübersicht</h1>
+        <p class="muted">Alle gespeicherten Termine des Friseursalons.</p>
+      </div>
+      <a class="logout-button" href="/logout">Logout</a>
+    </header>
+
+    <main class="content">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Uhrzeit</th>
+              <th>Name</th>
+              <th>Telefonnummer</th>
+              <th>Dienstleistung</th>
+              <th>Erstellt am</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{APPOINTMENT_ROWS}}
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </body>
+</html>

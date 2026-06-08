@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Salon Login</title>
+    <link rel="stylesheet" href="/public/style.css" />
+  </head>
+  <body class="login-page">
+    <main class="login-card">
+      <h1>Friseursalon Login</h1>
+      <p class="muted">Bitte melden Sie sich an, um die Termine zu sehen.</p>
+
+      <p id="error-message" class="message error" hidden></p>
+
+      <form action="/login" method="POST">
+        <label for="username">Benutzername</label>
+        <input id="username" name="username" type="text" autocomplete="username" required />
+
+        <label for="password">Passwort</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+
+        <button type="submit">Einloggen</button>
+      </form>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const error = params.get("error");
+      if (error) {
+        const message = document.getElementById("error-message");
+        message.textContent = error;
+        message.hidden = false;
+      }
+    </script>
+  </body>
+</html>
