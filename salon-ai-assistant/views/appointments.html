@@ -11,6 +11,7 @@
       <div>
         <h1>Terminübersicht</h1>
         <p class="muted">Alle gespeicherten Termine des Friseursalons.</p>
+        <p id="refresh-status" class="refresh-status">Automatische Aktualisierung aktiv.</p>
       </div>
       <a class="logout-button" href="/logout">Logout</a>
     </header>
@@ -28,11 +29,12 @@
               <th>Erstellt am</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="appointments-body">
             {{APPOINTMENT_ROWS}}
           </tbody>
         </table>
       </div>
     </main>
+    <script src="/public/appointments.js"></script>
   </body>
 </html>

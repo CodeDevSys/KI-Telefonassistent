@@ -18,6 +18,7 @@ const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "salon123";
 const SESSION_SECRET = process.env.SESSION_SECRET || "supersecret";
 
+app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(
@@ -83,6 +84,17 @@ app.get("/appointments", requireLogin, async (req, res, next) => {
   }
 });
 
+app.get("/api/appointments", requireApiLogin, async (req, res, next) => {
+  try {
+    const appointments = await getAppointments();
+    res.json({
+      appointments: serializeAppointments(appointments),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
@@ -120,6 +132,29 @@ function requireLogin(req, res, next) {
   }
 
   next();
+}
+
+function requireApiLogin(req, res, next) {
+  if (!req.session.isLoggedIn) {
+    res.status(401).json({ error: "Bitte melden Sie sich zuerst an." });
+    return;
+  }
+
+  next();
+}
+
+function serializeAppointments(appointments) {
+  return appointments.map((appointment) => ({
+    id: appointment.id,
+    date: appointment.appointment_date,
+    time: appointment.appointment_time,
+    name: appointment.name,
+    phone: appointment.phone,
+    service: appointment.service,
+    createdAt: appointment.created_at,
+    formattedDate: formatGermanDate(appointment.appointment_date),
+    formattedCreatedAt: formatCreatedAt(appointment.created_at),
+  }));
 }
 
 function renderAppointmentRows(appointments) {

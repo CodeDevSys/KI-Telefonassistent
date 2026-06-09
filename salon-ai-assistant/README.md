@@ -1,103 +1,151 @@
 # Salon AI Assistant
 
-Echtes Telefon-MVP für einen KI-Telefonassistenten eines Friseursalons.
+Cloud-basiertes Telefon-MVP für einen KI-Telefonassistenten eines Friseursalons.
 
-Der Ablauf ist real:
+Nach dem Deployment läuft alles zentral auf Render.com:
 
-1. Kunde ruft eine Twilio-Telefonnummer an.
-2. Twilio ruft den lokalen Node.js Server über ngrok auf.
-3. `POST /voice` gibt TwiML mit `Connect Stream` zurück.
-4. Twilio öffnet einen WebSocket zu `/voice/stream`.
-5. OpenAI Realtime verarbeitet die Sprache live.
+- Backend
+- Admin Login
+- Terminübersicht
+- Twilio Voice Webhook
+- Twilio Media Stream WebSocket
+- OpenAI Realtime Voice Integration
+- Persistente SQLite-Datenbank auf Render Disk
+
+Es wird kein lokaler Laptop und kein ngrok für den Betrieb benötigt.
+
+Ziel-URL:
+
+```text
+https://salon-ai-assistant.onrender.com
+```
+
+Öffentliche Seiten:
+
+```text
+https://salon-ai-assistant.onrender.com/login
+https://salon-ai-assistant.onrender.com/appointments
+```
+
+## 1. Architektur
+
+1. Kunde ruft die Twilio-Telefonnummer an.
+2. Twilio ruft `POST /voice` auf Render auf.
+3. Render antwortet mit TwiML und startet einen Twilio Media Stream.
+4. Twilio verbindet sich per WebSocket mit `wss://salon-ai-assistant.onrender.com/voice/stream`.
+5. OpenAI Realtime verarbeitet Sprache live.
 6. Die KI nutzt echte Backend-Tools für Verfügbarkeit und Buchung.
-7. Termine werden in SQLite gespeichert.
-8. Die Friseurin sieht neue Termine im Admin-Dashboard.
+7. Termine werden in SQLite auf der persistenten Render Disk gespeichert.
+8. Das Admin-Dashboard aktualisiert die Terminliste alle 5 Sekunden automatisch.
 
-Es gibt keinen Chat-Demo-Modus und keine Dummy-Daten.
+## 2. Datenbank
 
-## 1. Installation
+Für das MVP wird SQLite verwendet.
 
-```bash
-npm install
+Auf Render wird die Datenbank dauerhaft auf einer persistenten Disk gespeichert:
+
+```text
+/var/data/salon.sqlite
 ```
 
-## 2. ENV konfigurieren
+Die Disk wird über `render.yaml` angelegt:
 
-```bash
-cp .env.example .env
-```
-
-`.env` ausfüllen:
-
-```env
-PORT=3000
-PUBLIC_BASE_URL=https://IHRE-NGROK-DOMAIN.ngrok-free.app
-OPENAI_API_KEY=sk-...
-OPENAI_REALTIME_MODEL=gpt-4o-realtime-preview
-OPENAI_REALTIME_VOICE=alloy
-TWILIO_ACCOUNT_SID=AC...
-TWILIO_AUTH_TOKEN=...
-TWILIO_PHONE_NUMBER=+1...
-ADMIN_USER=admin
-ADMIN_PASS=salon123
-SESSION_SECRET=bitte-aendern
+```yaml
+disk:
+  name: salon-ai-data
+  mountPath: /var/data
+  sizeGB: 1
 ```
 
 Wichtig:
 
-- `OPENAI_API_KEY` ist Pflicht für echte Live-Sprache.
-- `PUBLIC_BASE_URL` muss die öffentliche HTTPS-ngrok-URL sein.
-- Für Twilio Media Streams wird daraus automatisch `wss://.../voice/stream`.
+- Render Free Services haben keine persistente Disk.
+- Das Blueprint nutzt deshalb `plan: starter`.
+- Nur Daten unter `/var/data` bleiben über Deploys und Restarts hinweg erhalten.
 
-## 3. Server starten
+## 3. Render Account erstellen
 
-```bash
-npm start
-```
-
-Der Server läuft lokal unter:
+1. Öffnen:
 
 ```text
-http://localhost:3000
+https://render.com
 ```
 
-Beim ersten Start wird automatisch `salon.sqlite` erstellt.
+2. Account erstellen oder einloggen.
+3. Render mit GitHub verbinden.
 
-## 4. ngrok installieren und starten
+## 4. GitHub Repository verbinden
 
-ngrok installieren:
+1. In Render auf `New` klicken.
+2. `Blueprint` auswählen.
+3. GitHub Repository auswählen.
+4. Render erkennt die Datei `render.yaml` im Repository.
+5. Blueprint bestätigen.
 
-```bash
-npm install -g ngrok
-```
-
-Oder von der offiziellen Seite installieren:
+Das Blueprint erstellt den Web Service:
 
 ```text
-https://ngrok.com/download
+salon-ai-assistant
 ```
 
-Tunnel starten:
-
-```bash
-ngrok http 3000
-```
-
-ngrok zeigt eine öffentliche HTTPS-URL, zum Beispiel:
+Mit der erwarteten URL:
 
 ```text
-https://abc123.ngrok-free.app
+https://salon-ai-assistant.onrender.com
 ```
 
-Diese URL in `.env` setzen:
+Falls der Name auf Render bereits vergeben ist, zeigt Render eine leicht andere URL an. Dann muss `PUBLIC_BASE_URL` auf diese tatsächliche URL gesetzt werden.
+
+## 5. Environment Variables setzen
+
+In Render beim Service `salon-ai-assistant` die Environment Variables prüfen und setzen:
 
 ```env
-PUBLIC_BASE_URL=https://abc123.ngrok-free.app
+OPENAI_API_KEY=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
+ADMIN_USER=
+ADMIN_PASS=
+SESSION_SECRET=
+PUBLIC_BASE_URL=https://salon-ai-assistant.onrender.com
 ```
 
-Server danach neu starten.
+Zusätzlich setzt `render.yaml`:
 
-## 5. Twilio Trial Account einrichten
+```env
+SQLITE_PATH=/var/data/salon.sqlite
+OPENAI_REALTIME_MODEL=gpt-4o-realtime-preview
+OPENAI_REALTIME_VOICE=alloy
+```
+
+Empfohlene Werte:
+
+```env
+ADMIN_USER=admin
+ADMIN_PASS=salon123
+SESSION_SECRET=<langer-zufaelliger-wert>
+```
+
+`OPENAI_API_KEY` ist Pflicht. Ohne diesen Key startet kein Fake- oder Demo-Modus für Telefonie.
+
+## 6. Deploy starten
+
+1. In Render den Blueprint deployen.
+2. Warten, bis der Service `Live` ist.
+3. Health Check öffnen:
+
+```text
+https://salon-ai-assistant.onrender.com/health
+```
+
+Erwartete Antwort:
+
+```json
+{ "ok": true }
+```
+
+## 7. Twilio Account und Telefonnummer
 
 1. Twilio Account erstellen:
 
@@ -105,66 +153,81 @@ Server danach neu starten.
 https://www.twilio.com/try-twilio
 ```
 
-2. Trial-Telefonnummer kaufen:
-   - Twilio Console öffnen.
-   - `Phone Numbers` auswählen.
-   - Eine Voice-fähige Nummer kaufen.
+2. Voice-fähige Telefonnummer kaufen.
+3. Bei Trial Accounts die eigene Handynummer als `Verified Caller ID` verifizieren.
 
-3. Verified Caller ID einrichten:
-   - Twilio Trial Accounts dürfen nur verifizierte Ziel-/Anrufernummern nutzen.
-   - In der Twilio Console `Verified Caller IDs` öffnen.
-   - Ihre eigene Handynummer verifizieren.
-   - Den Bestätigungscode eingeben.
+Wichtig für Twilio Trial:
 
-Hinweis:
+- Trial erlaubt nur verifizierte Telefonnummern.
+- Für Anrufe von beliebigen Kunden muss der Twilio Account upgegradet werden.
 
-Mit einem Twilio Trial Account können Sie nur von beziehungsweise zu verifizierten Nummern testen. Für echte beliebige Kundenanrufe muss der Twilio Account upgegradet werden.
+## 8. Twilio Webhook eintragen
 
-## 6. Twilio Webhook konfigurieren
+In Twilio:
 
-In der Twilio Console die gekaufte Telefonnummer öffnen.
-
-Unter `Voice Configuration`:
-
-- `A call comes in`: `Webhook`
-- URL:
+1. `Phone Numbers` öffnen.
+2. Gekaufte Nummer auswählen.
+3. Unter `Voice Configuration` setzen:
 
 ```text
-https://abc123.ngrok-free.app/voice
+A call comes in: Webhook
+URL: https://salon-ai-assistant.onrender.com/voice
+Method: HTTP POST
 ```
-
-- Methode: `HTTP POST`
 
 Speichern.
 
-Twilio öffnet anschließend bei jedem Anruf automatisch den Media Stream:
+Der Media Stream wird automatisch vom Backend erzeugt:
 
 ```text
-wss://abc123.ngrok-free.app/voice/stream
+wss://salon-ai-assistant.onrender.com/voice/stream
 ```
 
-## 7. Testanruf durchführen
+## 9. Testanruf durchführen
 
-1. Server starten:
+1. Render Service muss `Live` sein.
+2. Twilio Webhook muss auf Render zeigen:
 
-```bash
-npm start
+```text
+https://salon-ai-assistant.onrender.com/voice
 ```
 
-2. ngrok starten:
+3. Mit der verifizierten Telefonnummer die Twilio-Nummer anrufen.
+4. Der KI-Assistent begrüßt den Kunden.
+5. Termin per Sprache vereinbaren.
+6. Der Termin wird in SQLite gespeichert.
 
-```bash
-ngrok http 3000
+## 10. Praktische Demo
+
+Gerät 1: Tablet
+
+1. Browser öffnen.
+2. Login öffnen:
+
+```text
+https://salon-ai-assistant.onrender.com/login
 ```
 
-3. `PUBLIC_BASE_URL` in `.env` auf die aktuelle ngrok-URL setzen.
-4. Server neu starten.
-5. Twilio Voice Webhook auf `https://IHRE-NGROK-URL/voice` setzen.
-6. Mit der verifizierten Telefonnummer die Twilio-Nummer anrufen.
+3. Einloggen.
+4. Terminübersicht offen lassen:
 
-Der Assistent begrüßt den Kunden und führt die Terminbuchung per Sprache durch.
+```text
+https://salon-ai-assistant.onrender.com/appointments
+```
 
-## 8. Gesprächslogik
+Die Tabelle aktualisiert sich alle 5 Sekunden automatisch.
+
+Gerät 2: Handy
+
+1. Twilio Telefonnummer anrufen.
+2. Mit dem KI-Assistenten sprechen.
+3. Termin buchen.
+
+Ergebnis:
+
+Der neue Termin erscheint ohne manuelles Neuladen in der Terminübersicht auf dem Tablet.
+
+## 11. Gesprächslogik
 
 Die KI spricht Deutsch und folgt diesem Ablauf:
 
@@ -177,16 +240,16 @@ Die KI spricht Deutsch und folgt diesem Ablauf:
 4. Verfügbarkeit live in SQLite prüfen
 5. Falls belegt oder geschlossen: drei freie Alternativen anbieten
 6. Name und Telefonnummer abfragen
-7. Termin in SQLite speichern
+7. Termin speichern
 8. Termin bestätigen
 
-Die KI darf Termine nicht frei erfinden. Sie muss diese Backend-Tools nutzen:
+Die KI muss echte Backend-Tools nutzen:
 
 - `checkAvailability(date, time)`
 - `getAvailableSlots(date, time)`
 - `createAppointment(name, phone, service, date, time)`
 
-## 9. Slot- und Öffnungszeiten
+## 12. Slot- und Öffnungszeiten
 
 - Alle Termine dauern 30 Minuten.
 - Montag bis Freitag: 09:00 bis 18:00
@@ -194,49 +257,48 @@ Die KI darf Termine nicht frei erfinden. Sie muss diese Backend-Tools nutzen:
 - Sonntag: geschlossen
 - Doppelbuchungen werden durch einen eindeutigen SQLite-Index verhindert.
 
-## 10. Admin Login
+## 13. Admin Login
 
 Login:
 
 ```text
-http://localhost:3000/login
-```
-
-Standarddaten:
-
-- Benutzername: `admin`
-- Passwort: `salon123`
-
-Konfigurierbar über:
-
-```env
-ADMIN_USER=admin
-ADMIN_PASS=salon123
+https://salon-ai-assistant.onrender.com/login
 ```
 
 Terminübersicht:
 
 ```text
-http://localhost:3000/appointments
+https://salon-ai-assistant.onrender.com/appointments
 ```
 
-Neue Termine aus echten Telefonanrufen werden direkt aus SQLite geladen.
+Die Zugangsdaten werden über Render Environment Variables gesetzt:
 
-## 11. API und Routen
+```env
+ADMIN_USER=
+ADMIN_PASS=
+```
+
+## 14. API und Routen
 
 ```text
+GET  /
+GET  /health
 GET  /login
 POST /login
 GET  /logout
 GET  /appointments
+GET  /api/appointments
 POST /voice
 WS   /voice/stream
-GET  /health
 ```
 
-## 12. Projektstruktur
+`/api/appointments` ist geschützt und wird vom Dashboard alle 5 Sekunden abgefragt.
+
+## 15. Projektstruktur
 
 ```text
+render.yaml
+
 salon-ai-assistant/
   package.json
   server.js
@@ -251,13 +313,18 @@ salon-ai-assistant/
     appointments.html
   /public
     style.css
+    appointments.js
 ```
 
-## 13. Erweiterungsmöglichkeiten
+## 16. Lokale Entwicklung optional
 
-- SMS-Bestätigung nach erfolgreicher Buchung.
-- Kalenderansicht im Admin-Dashboard.
-- Absagen und Umbuchungen per Sprache.
-- Unterschiedliche Dauer je Dienstleistung.
-- Persistenter Session Store für produktiven Betrieb.
-- Validierung von Twilio-Signaturen für öffentliche Deployments.
+Für lokale Entwicklung:
+
+```bash
+cd salon-ai-assistant
+npm install
+cp .env.example .env
+npm start
+```
+
+Für den echten Cloud-Betrieb wird ausschließlich Render verwendet. Twilio muss dann direkt auf die Render-URL zeigen.

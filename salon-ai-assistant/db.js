@@ -1,8 +1,14 @@
+const fs = require("fs");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 
 const SLOT_MINUTES = 30;
 const DB_PATH = process.env.SQLITE_PATH || path.join(__dirname, "salon.sqlite");
+const DB_DIR = path.dirname(DB_PATH);
+
+if (!fs.existsSync(DB_DIR)) {
+  fs.mkdirSync(DB_DIR, { recursive: true });
+}
 
 const db = new sqlite3.Database(DB_PATH);
 
