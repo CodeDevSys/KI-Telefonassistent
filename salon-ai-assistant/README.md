@@ -10,7 +10,7 @@ Nach dem Deployment läuft alles zentral auf Render.com:
 - Twilio Voice Webhook
 - Twilio Media Stream WebSocket
 - OpenAI Realtime Voice Integration
-- Persistente SQLite-Datenbank auf Render Disk
+- Persistente PostgreSQL-Datenbank auf Render
 
 Es wird kein lokaler Laptop und kein ngrok für den Betrieb benötigt.
 
@@ -51,33 +51,34 @@ Empfohlene Reihenfolge:
 4. Twilio verbindet sich per WebSocket mit `wss://salon-ai-assistant.onrender.com/voice/stream`.
 5. OpenAI Realtime verarbeitet Sprache live.
 6. Die KI nutzt echte Backend-Tools für Verfügbarkeit und Buchung.
-7. Termine werden in SQLite auf der persistenten Render Disk gespeichert.
+7. Termine werden zentral in Render PostgreSQL gespeichert.
 8. Das Admin-Dashboard aktualisiert die Terminliste alle 5 Sekunden automatisch.
 
 ## 2. Datenbank
 
-Für das MVP wird SQLite verwendet.
+Für Render wird PostgreSQL verwendet.
 
-Auf Render wird die Datenbank dauerhaft auf einer persistenten Disk gespeichert:
+Warum PostgreSQL:
 
-```text
-/var/data/salon.sqlite
-```
+- Keine native SQLite-Binary.
+- Kein `node_sqlite3.node`.
+- Kein GLIBC-Problem auf Render.
+- Dauerhafte zentrale Speicherung über Render PostgreSQL.
 
-Die Disk wird über `render.yaml` angelegt:
+Die Datenbank wird über `render.yaml` angelegt:
 
 ```yaml
-disk:
-  name: salon-ai-data
-  mountPath: /var/data
-  sizeGB: 1
+databases:
+  - name: salon-ai-postgres
+    databaseName: salon_ai_assistant
+    user: salon_ai_assistant
 ```
 
-Wichtig:
+Der Web Service erhält automatisch:
 
-- Render Free Services haben keine persistente Disk.
-- Das Blueprint nutzt deshalb `plan: starter`.
-- Nur Daten unter `/var/data` bleiben über Deploys und Restarts hinweg erhalten.
+```env
+DATABASE_URL=<Render PostgreSQL connection string>
+```
 
 ## 3. Render Account erstellen
 
@@ -130,7 +131,7 @@ PUBLIC_BASE_URL=https://salon-ai-assistant.onrender.com
 Zusätzlich setzt `render.yaml`:
 
 ```env
-SQLITE_PATH=/var/data/salon.sqlite
+DATABASE_URL=<wird von Render PostgreSQL gesetzt>
 OPENAI_REALTIME_MODEL=gpt-4o-realtime-preview
 OPENAI_REALTIME_VOICE=alloy
 ```
@@ -211,7 +212,7 @@ https://salon-ai-assistant.onrender.com/voice
 3. Mit der verifizierten Telefonnummer die Twilio-Nummer anrufen.
 4. Der KI-Assistent begrüßt den Kunden.
 5. Termin per Sprache vereinbaren.
-6. Der Termin wird in SQLite gespeichert.
+6. Der Termin wird in PostgreSQL gespeichert.
 
 ## 10. Praktische Demo
 
@@ -253,7 +254,7 @@ Die KI spricht Deutsch und folgt diesem Ablauf:
    - Haare färben
    - Styling
 3. Terminwunsch verstehen
-4. Verfügbarkeit live in SQLite prüfen
+4. Verfügbarkeit live in PostgreSQL prüfen
 5. Falls belegt oder geschlossen: drei freie Alternativen anbieten
 6. Name und Telefonnummer abfragen
 7. Termin speichern
@@ -271,7 +272,7 @@ Die KI muss echte Backend-Tools nutzen:
 - Montag bis Freitag: 09:00 bis 18:00
 - Samstag: 09:00 bis 14:00
 - Sonntag: geschlossen
-- Doppelbuchungen werden durch einen eindeutigen SQLite-Index verhindert.
+- Doppelbuchungen werden durch einen eindeutigen PostgreSQL-Index verhindert.
 
 ## 13. Admin Login
 

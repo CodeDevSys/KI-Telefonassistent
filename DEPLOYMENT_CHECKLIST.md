@@ -40,19 +40,17 @@ https://salon-ai-assistant.onrender.com
 
 □ Falls Render eine andere URL vergeben hat, `PUBLIC_BASE_URL` angepasst
 
-□ Persistent Disk angelegt
+□ Render PostgreSQL Datenbank angelegt
 
-□ Persistent Disk Mount Path ist:
+□ Datenbank heißt:
 
 ```text
-/var/data
+salon-ai-postgres
 ```
 
-□ `SQLITE_PATH` gesetzt:
+□ `DATABASE_URL` ist im Web Service gesetzt
 
-```env
-SQLITE_PATH=/var/data/salon.sqlite
-```
+□ Keine `SQLITE_PATH` Variable mehr erforderlich
 
 □ Health Check erreichbar:
 
@@ -122,19 +120,17 @@ https://salon-ai-assistant.onrender.com/appointments
 
 ## Datenbank
 
-□ Datenbank wird automatisch erstellt
+□ Datenbankschema wird automatisch erstellt
 
-□ Datenbank liegt auf Render Disk:
+□ PostgreSQL Tabelle wird automatisch angelegt:
 
 ```text
-/var/data/salon.sqlite
+appointments
 ```
-
-□ Tabelle `appointments` wird automatisch angelegt
 
 □ Doppelbuchungen werden verhindert
 
-□ Termine bleiben nach Render Restart erhalten
+□ Termine bleiben nach Render Restart und Deploy erhalten
 
 ## OpenAI
 
@@ -216,7 +212,7 @@ HTTP POST
 
 □ Falls KI nicht spricht: `OPENAI_API_KEY` und Render Logs geprüft
 
-□ Falls Termine nicht bleiben: Render Disk und `SQLITE_PATH` geprüft
+□ Falls Termine nicht bleiben: Render PostgreSQL und `DATABASE_URL` geprüft
 
 □ Falls Dashboard nicht aktualisiert: Browser-Konsole und `/api/appointments` geprüft
 

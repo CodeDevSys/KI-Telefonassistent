@@ -1,60 +1,35 @@
-const fs = require("fs");
-const path = require("path");
-const sqlite3 = require("sqlite3").verbose();
+const { Pool } = require("pg");
 
 const SLOT_MINUTES = 30;
-const DB_PATH = process.env.SQLITE_PATH || path.join(__dirname, "salon.sqlite");
-const DB_DIR = path.dirname(DB_PATH);
+const pool = createPool();
 
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
-}
+function createPool() {
+  if (!process.env.DATABASE_URL) {
+    console.warn("DATABASE_URL fehlt. Auf Render wird diese Variable automatisch aus der PostgreSQL-Datenbank gesetzt.");
+  }
 
-const db = new sqlite3.Database(DB_PATH);
-
-function run(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function onRun(error) {
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve({ id: this.lastID, changes: this.changes });
-    });
+  return new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: shouldUseSsl(process.env.DATABASE_URL) ? { rejectUnauthorized: false } : undefined,
   });
 }
 
-function get(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (error, row) => {
-      if (error) {
-        reject(error);
-        return;
-      }
+function shouldUseSsl(databaseUrl) {
+  if (process.env.DATABASE_SSL === "true") {
+    return true;
+  }
 
-      resolve(row);
-    });
-  });
+  return typeof databaseUrl === "string" && databaseUrl.includes("sslmode=require");
 }
 
-function all(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (error, rows) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve(rows);
-    });
-  });
+async function query(sql, params = []) {
+  return pool.query(sql, params);
 }
 
 async function initDb() {
-  await run(`
+  await query(`
     CREATE TABLE IF NOT EXISTS appointments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
       service TEXT NOT NULL,
@@ -64,31 +39,33 @@ async function initDb() {
     )
   `);
 
-  await run(`
+  await query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_slot
     ON appointments (appointment_date, appointment_time)
   `);
 }
 
 async function getAppointments() {
-  return all(`
+  const result = await query(`
     SELECT id, name, phone, service, appointment_date, appointment_time, created_at
     FROM appointments
     ORDER BY created_at DESC, id DESC
   `);
+
+  return result.rows;
 }
 
 async function isSlotAvailable(appointmentDate, appointmentTime) {
-  const row = await get(
+  const result = await query(
     `
-      SELECT COUNT(*) AS count
+      SELECT COUNT(*)::int AS count
       FROM appointments
-      WHERE appointment_date = ? AND appointment_time = ?
+      WHERE appointment_date = $1 AND appointment_time = $2
     `,
     [appointmentDate, appointmentTime]
   );
 
-  return row.count === 0;
+  return result.rows[0].count === 0;
 }
 
 async function checkAvailability(date, time) {
@@ -177,11 +154,12 @@ async function createAppointment(appointment) {
   }
 
   try {
-    const result = await run(
+    const result = await query(
       `
         INSERT INTO appointments
           (name, phone, service, appointment_date, appointment_time, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id
       `,
       [
         normalized.name,
@@ -193,9 +171,9 @@ async function createAppointment(appointment) {
       ]
     );
 
-    return result.id;
+    return result.rows[0].id;
   } catch (error) {
-    if (error.code === "SQLITE_CONSTRAINT") {
+    if (error.code === "23505") {
       const slotError = new Error("Der gewünschte Termin ist leider bereits vergeben.");
       slotError.code = "SLOT_TAKEN";
       throw slotError;

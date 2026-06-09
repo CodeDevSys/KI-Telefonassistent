@@ -256,7 +256,7 @@ function buildTools() {
       type: "function",
       name: "checkAvailability",
       description:
-        "Prüft live in SQLite, ob ein 30-Minuten-Termin innerhalb der Öffnungszeiten frei ist.",
+        "Prüft live in PostgreSQL, ob ein 30-Minuten-Termin innerhalb der Öffnungszeiten frei ist.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -298,7 +298,7 @@ function buildTools() {
       type: "function",
       name: "createAppointment",
       description:
-        "Speichert einen Termin endgültig in SQLite. Verhindert Doppelbuchungen über die Datenbank.",
+        "Speichert einen Termin endgültig in PostgreSQL. Verhindert Doppelbuchungen über die Datenbank.",
       parameters: {
         type: "object",
         additionalProperties: false,

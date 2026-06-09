@@ -91,40 +91,40 @@ Wichtig:
 - Der Startbefehl ist `npm start`.
 - Render setzt automatisch `PORT`.
 
-## 4. Persistent Disk anlegen
+## 4. PostgreSQL Datenbank anlegen
 
-Die persistente Disk ist bereits in `render.yaml` vorbereitet:
+Die PostgreSQL-Datenbank ist bereits in `render.yaml` vorbereitet:
 
 ```yaml
-disk:
-  name: salon-ai-data
-  mountPath: /var/data
-  sizeGB: 1
+databases:
+  - name: salon-ai-postgres
+    databaseName: salon_ai_assistant
+    user: salon_ai_assistant
 ```
 
-Dadurch wird SQLite dauerhaft gespeichert unter:
+Dadurch erzeugt Render eine zentrale PostgreSQL-Datenbank und setzt im Web Service automatisch:
 
-```text
-/var/data/salon.sqlite
+```env
+DATABASE_URL=<Render PostgreSQL connection string>
 ```
 
-Wenn Render beim Blueprint fragt, ob die Disk angelegt werden soll:
+Wenn Render beim Blueprint fragt, ob die Datenbank angelegt werden soll:
 
-1. Disk bestätigen.
-2. Größe `1 GB` beibehalten.
-3. Mount Path `/var/data` beibehalten.
+1. PostgreSQL-Datenbank bestätigen.
+2. Kleinsten passenden Plan für das MVP wählen.
+3. Verbindung zum Web Service bestätigen.
 
 Screenshot-Beschreibung:
 
-- In der Service-Konfiguration gibt es einen Bereich `Disks`.
-- Dort steht `salon-ai-data`.
-- Mount Path muss `/var/data` sein.
+- In der Blueprint-Übersicht erscheinen ein Web Service und eine PostgreSQL-Datenbank.
+- Die Datenbank heißt `salon-ai-postgres`.
+- Der Web Service erhält `DATABASE_URL` aus dieser Datenbank.
 
 Wichtig:
 
-- Render Free Services haben keine persistente Disk.
-- Für dieses MVP ist `plan: starter` gesetzt.
-- Eine Disk bindet den Service an eine einzelne Instanz. Das ist für das MVP korrekt.
+- Es wird keine SQLite-Datei mehr verwendet.
+- Es wird keine Render Disk benötigt.
+- Das vermeidet native `sqlite3`-/GLIBC-Probleme beim Deploy.
 
 ## 5. Environment Variables setzen
 
@@ -150,7 +150,7 @@ PUBLIC_BASE_URL=https://salon-ai-assistant.onrender.com
 Bereits durch `render.yaml` gesetzt:
 
 ```env
-SQLITE_PATH=/var/data/salon.sqlite
+DATABASE_URL=<wird von salon-ai-postgres gesetzt>
 OPENAI_REALTIME_MODEL=gpt-4o-realtime-preview
 OPENAI_REALTIME_VOICE=alloy
 TWILIO_VALIDATE_WEBHOOKS=false
@@ -318,7 +318,7 @@ Handy:
 
 Erwartung:
 
-- Termin wird in SQLite gespeichert.
+- Termin wird in PostgreSQL gespeichert.
 - Termin erscheint innerhalb von 5 Sekunden im Tablet-Dashboard.
 
 ## 13. Wenn der Service nicht startet
@@ -328,16 +328,14 @@ Prüfen:
 - `render.yaml` liegt im Repo-Root.
 - `rootDir` ist `salon-ai-assistant`.
 - `package.json` enthält `start`.
-- `SQLITE_PATH` ist `/var/data/salon.sqlite`.
-- Persistent Disk ist bei `/var/data` gemountet.
+- `DATABASE_URL` ist durch Render PostgreSQL gesetzt.
 - `SESSION_SECRET` ist gesetzt.
 
-## 14. Wenn Daten nach Deploy verschwinden
+## 14. Wenn Daten nach Deploy fehlen
 
 Prüfen:
 
-- Service verwendet Render Disk.
-- `SQLITE_PATH=/var/data/salon.sqlite`.
-- Datenbank liegt nicht im Projektordner.
-
-Nur `/var/data` ist persistent.
+- Render PostgreSQL-Datenbank existiert.
+- `DATABASE_URL` ist im Web Service vorhanden.
+- Logs zeigen keine Datenbank-Verbindungsfehler.
+- Tabelle `appointments` wird beim Start automatisch angelegt.
