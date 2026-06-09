@@ -27,6 +27,22 @@ https://salon-ai-assistant.onrender.com/login
 https://salon-ai-assistant.onrender.com/appointments
 ```
 
+## Schnellstart-Dokumente
+
+Im Repository-Root liegen die praktischen Setup-Dateien:
+
+```text
+RENDER_SETUP.md
+TWILIO_SETUP.md
+DEPLOYMENT_CHECKLIST.md
+```
+
+Empfohlene Reihenfolge:
+
+1. `RENDER_SETUP.md`
+2. `TWILIO_SETUP.md`
+3. `DEPLOYMENT_CHECKLIST.md`
+
 ## 1. Architektur
 
 1. Kunde ruft die Twilio-Telefonnummer an.
