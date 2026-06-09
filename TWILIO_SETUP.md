@@ -5,7 +5,7 @@ Schritt-für-Schritt-Anleitung für die echte Twilio-Telefonie.
 Ziel:
 
 ```text
-Handy -> Twilio Telefonnummer -> Render Webhook -> OpenAI Realtime -> PostgreSQL Termin -> Dashboard
+Handy -> Twilio Telefonnummer -> Render Webhook -> OpenAI Realtime -> SQLite Termin -> Dashboard
 ```
 
 Render-Ziel-URL:

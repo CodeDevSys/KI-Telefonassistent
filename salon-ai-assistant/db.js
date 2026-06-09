@@ -1,35 +1,19 @@
-const { Pool } = require("pg");
+const fs = require("fs");
+const path = require("path");
+const initSqlJs = require("sql.js");
 
 const SLOT_MINUTES = 30;
-const pool = createPool();
+const DB_PATH = process.env.SQLITE_PATH || path.join(__dirname, "salon.sqlite");
+const DB_DIR = path.dirname(DB_PATH);
 
-function createPool() {
-  if (!process.env.DATABASE_URL) {
-    console.warn("DATABASE_URL fehlt. Auf Render wird diese Variable automatisch aus der PostgreSQL-Datenbank gesetzt.");
-  }
-
-  return new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: shouldUseSsl(process.env.DATABASE_URL) ? { rejectUnauthorized: false } : undefined,
-  });
-}
-
-function shouldUseSsl(databaseUrl) {
-  if (process.env.DATABASE_SSL === "true") {
-    return true;
-  }
-
-  return typeof databaseUrl === "string" && databaseUrl.includes("sslmode=require");
-}
-
-async function query(sql, params = []) {
-  return pool.query(sql, params);
-}
+let dbPromise;
 
 async function initDb() {
-  await query(`
+  const db = await getDb();
+
+  runSql(db, `
     CREATE TABLE IF NOT EXISTS appointments (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
       service TEXT NOT NULL,
@@ -39,33 +23,118 @@ async function initDb() {
     )
   `);
 
-  await query(`
+  runSql(db, `
     CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_slot
     ON appointments (appointment_date, appointment_time)
   `);
+
+  persistDb(db);
+}
+
+async function getDb() {
+  if (!dbPromise) {
+    dbPromise = createDb();
+  }
+
+  return dbPromise;
+}
+
+async function createDb() {
+  ensureDbDirectory();
+
+  const wasmPath = require.resolve("sql.js/dist/sql-wasm.wasm");
+  const SQL = await initSqlJs({
+    locateFile: (file) => path.join(path.dirname(wasmPath), file),
+  });
+
+  if (fs.existsSync(DB_PATH)) {
+    const fileBuffer = fs.readFileSync(DB_PATH);
+    return new SQL.Database(fileBuffer);
+  }
+
+  return new SQL.Database();
+}
+
+function ensureDbDirectory() {
+  if (!fs.existsSync(DB_DIR)) {
+    fs.mkdirSync(DB_DIR, { recursive: true });
+  }
+}
+
+function persistDb(db) {
+  ensureDbDirectory();
+  fs.writeFileSync(DB_PATH, Buffer.from(db.export()));
+}
+
+function runSql(db, sql, params = []) {
+  db.run(sql, params);
+  return {
+    changes: db.getRowsModified(),
+  };
+}
+
+async function run(sql, params = []) {
+  const db = await getDb();
+  const result = runSql(db, sql, params);
+  const idRow = getOneSql(db, "SELECT last_insert_rowid() AS id");
+  persistDb(db);
+
+  return {
+    ...result,
+    id: idRow ? idRow.id : null,
+  };
+}
+
+async function get(sql, params = []) {
+  const db = await getDb();
+  return getOneSql(db, sql, params);
+}
+
+async function all(sql, params = []) {
+  const db = await getDb();
+  return getAllSql(db, sql, params);
+}
+
+function getOneSql(db, sql, params = []) {
+  const rows = getAllSql(db, sql, params);
+  return rows[0];
+}
+
+function getAllSql(db, sql, params = []) {
+  const statement = db.prepare(sql);
+  const rows = [];
+
+  try {
+    statement.bind(params);
+    while (statement.step()) {
+      rows.push(statement.getAsObject());
+    }
+  } finally {
+    statement.free();
+  }
+
+  return rows;
 }
 
 async function getAppointments() {
-  const result = await query(`
+  return all(`
     SELECT id, name, phone, service, appointment_date, appointment_time, created_at
     FROM appointments
     ORDER BY created_at DESC, id DESC
   `);
-
-  return result.rows;
 }
 
 async function isSlotAvailable(appointmentDate, appointmentTime) {
-  const result = await query(
+  const row = await get(
     `
-      SELECT COUNT(*)::int AS count
+      SELECT COUNT(*) AS count
       FROM appointments
-      WHERE appointment_date = $1 AND appointment_time = $2
+      WHERE appointment_date = ? AND appointment_time = ?
     `,
     [appointmentDate, appointmentTime]
   );
 
-  return result.rows[0].count === 0;
+  return row.count === 0;
 }
 
 async function checkAvailability(date, time) {
@@ -154,12 +223,11 @@ async function createAppointment(appointment) {
   }
 
   try {
-    const result = await query(
+    const result = await run(
       `
         INSERT INTO appointments
           (name, phone, service, appointment_date, appointment_time, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id
+        VALUES (?, ?, ?, ?, ?, ?)
       `,
       [
         normalized.name,
@@ -171,9 +239,9 @@ async function createAppointment(appointment) {
       ]
     );
 
-    return result.rows[0].id;
+    return result.id;
   } catch (error) {
-    if (error.code === "23505") {
+    if (String(error.message || "").includes("UNIQUE constraint failed")) {
       const slotError = new Error("Der gewünschte Termin ist leider bereits vergeben.");
       slotError.code = "SLOT_TAKEN";
       throw slotError;

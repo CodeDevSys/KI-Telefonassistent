@@ -11,7 +11,7 @@
     "assistant",
     "twilio",
     "openai",
-    "postgres"
+    "sqlite"
   ],
   "author": "",
   "license": "MIT",
@@ -23,7 +23,7 @@
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "openai": "^6.42.0",
-    "pg": "^8.21.0",
+    "sql.js": "^1.14.1",
     "twilio": "^6.0.2",
     "ws": "^8.21.0"
   }
